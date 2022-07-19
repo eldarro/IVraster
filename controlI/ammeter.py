@@ -480,8 +480,8 @@ def main():
 
     #do_print(f, "Set voltage (V),Readback voltage (V),%s," % ",".join("Current chan %i (A)" % i for i in chan_list))
     do_print(f, "Start V, Stop V, Step V, Num Readings, ADC Rate, Sleep HV, Sleep DAC, Sleep Readings")
-    do_print(f, "%s, %s, %s, %s, %s, %s, %s, %s" % (args.start_v, args.stop_v, args.step_v, args.num_readings, args.adc_rate, sleepHighVoltage, sleepAllDAC, sleepNumReadings))
-    do_print(f, "HV_set (V),HV_rdb (V), HV_err (V),%s,%s" % (",".join("VsCH_%i (V)" % i for i in chan_list),",".join("IsCH_%i (A)" % i for i in chan_list)))
+    do_print(f, "%s, %s, %s, %s, %s, %s, %s, %s, %s" % (time.time(), args.start_v, args.stop_v, args.step_v, args.num_readings, args.adc_rate, sleepHighVoltage, sleepAllDAC, sleepNumReadings))
+    do_print(f, "Time (s), HV_set (V),HV_rdb (V), HV_err (V),%s,%s" % (",".join("VsCH_%i (V)" % i for i in chan_list),",".join("IsCH_%i (A)" % i for i in chan_list)))
 
     # Loop through the voltages and channels
     for hv_v in hv_list:
@@ -515,7 +515,7 @@ def main():
 
             #do_print(f, "%s,%s,%s" % (hv_v,hv_v_rdb,",".join("%.5e" % x for x in currents)))
             #do_print(f, "%s,%s,%s,%s" % (hv_v,hv_v_rdb,"," .join("%.5e" % x for x in currents),",".join("%.5e" % x for x in Vsipm)))
-            do_print(f, "%s,%s,%.5f,%s,%s" % (hv_v,hv_v_rdb,hv_err,",".join("%.5e" % x for x in Vsipm) ,",".join("%.5e" % x for x in currents)))
+            do_print(f, "%s,%s,%s,%.5f,%s,%s" % (time.time(),hv_v,hv_v_rdb,hv_err,",".join("%.5e" % x for x in Vsipm) ,",".join("%.5e" % x for x in currents)))
             
             #sleep for each reading of all channels
             time.sleep(sleepNumReadings)
