@@ -19,14 +19,15 @@ class load_data:
     def __init__(self, loc, fname):
         self.XY = np.genfromtxt(os.path.join(loc,fname + 'XY.csv'), delimiter = ',', comments='#', names = True, skip_header=1)
         self.IV = np.genfromtxt(os.path.join(loc,fname + 'IV.csv'), delimiter = ',', comments='#', names = True, skip_header=2)
+        self.Iproc = {}
 
 # Main loop for aligning and analysing the data
 # Do all of the analysis tasks necessary for finding the sensor
 def main(i,dt):
     timecorr(i,dt)
     parsescan(i)
-    rastersnake()
-    cluster()   
+    rastersnake(i)
+    cluster(i)   
         
 # Correct for the offset between electrometer time and unix time  
 # The parameter dt can be used as a fitting paramter
@@ -37,10 +38,10 @@ def timecorr(i,dt):
   
 # Reorganize data into ordered structures
 # This function makes assumptions about the structure of the input data
-def parsescan(j):
+def parsescan(i):
     data.coordinates = []
-    for i in range(int(len(data.XY)/2)):
-        data.coordinates.append([data.XY['xpos'][2*i],data.XY['ypos'][2*i],data.XY['time'][2*i],data.XY['time'][2*i+1]])
+    for j in range(int(len(data.XY)/2)):
+        data.coordinates.append([data.XY['xpos'][2*j],data.XY['ypos'][2*j],data.XY['time'][2*j],data.XY['time'][2*j+1]])
     #data.coordinates.append([data.XY['xpos'][-1],data.XY['ypos'][-1],data.XY['time'][-1],data.XY['time'][-1]+param[6]])
     #print(data.coordinates)
     data.XYIr = []
@@ -51,10 +52,10 @@ def parsescan(j):
     data.index = []
     for row in data.coordinates:
         I = []
-        for i in range(len(data.IV['TsCH_%i_s'%j])):
-            if row[2] < data.IV['TsCH_%i_s'%j][i] < row[3]:
-                I.append(data.IV['IsCH_%i_A'%j][i])
-                data.XYIr.append([row[0],row[1],data.IV['IsCH_%i_A'%j][i]])
+        for k in range(len(data.IV['TsCH_%i_s'%i])):
+            if row[2] < data.IV['TsCH_%i_s'%i][k] < row[3]:
+                I.append(data.IV['IsCH_%i_A'%i][k])
+                data.XYIr.append([row[0],row[1],data.IV['IsCH_%i_A'%i][k]])
                 f.write('\n%s,%s,%s'%(row[0],row[1],I)) 
         Iavg = np.average(I)
         #if Iavg != Iavg: # Check for missing data
@@ -78,36 +79,36 @@ def parsescan(j):
         data.Ir.append(row[2])
 
 # Convert the shape of the data from bidirectional to unidirectional        
-def rastersnake():
+def rastersnake(i):
     X = np.unique(data.X)
     Y = np.unique(data.Y)
-    data.Xproc, data.Yproc, data.Iproc = [],[],[]
+    data.Xproc, data.Yproc, data.Iproc['%s'%i] = [],[],[]
     for x in X:
         for y in Y:
-            for i in range(len(data.XYI)):
-                if x == data.XYI[i][0]:
-                    if y == data.XYI[i][1]:
-                        data.Xproc.append(data.XYI[i][0])
-                        data.Yproc.append(data.XYI[i][1])
-                        data.Iproc.append(data.XYI[i][2])
+            for j in range(len(data.XYI)):
+                if x == data.XYI[j][0]:
+                    if y == data.XYI[j][1]:
+                        data.Xproc.append(data.XYI[j][0])
+                        data.Yproc.append(data.XYI[j][1])
+                        data.Iproc['%s'%i].append(data.XYI[j][2])
     data.Xproc = np.asarray(data.Xproc)
     data.Yproc = np.asarray(data.Yproc)
-    data.Iproc = np.asarray(data.Iproc)
-    data.Iproc = np.nan_to_num(data.Iproc,nan=min(data.Iproc)) # Replace missing data with 0
+    data.Iproc['%s'%i] = np.asarray(data.Iproc['%s'%i])
+    data.Iproc['%s'%i] = np.nan_to_num(data.Iproc['%s'%i],nan=min(data.Iproc['%s'%i])) # Replace missing data with 0
 
 # Clump the data and set thresholds
-def cluster():           
+def cluster(i):           
     # Determine which K-Means cluster each point belongs to
-    cluster_id = KMeans(10).fit_predict(data.Iproc.reshape(-1, 1))
+    cluster_id = KMeans(10).fit_predict(data.Iproc['%s'%i].reshape(-1, 1))
     # Determine densities by cluster assignment and plot
     figure, axis = plt.subplots(dpi=200)
-    bins = np.linspace(data.Iproc.min(), data.Iproc.max(), 40)
+    bins = np.linspace(data.Iproc['%s'%i].min(), data.Iproc['%s'%i].max(), 40)
     data.Kmean, data.Kstd = [],[]
     axis.set_xlabel('Current [A]')
     axis.set_ylabel('Counts')
     # Average the clusters
     for ii in np.unique(cluster_id):
-        subset = data.Iproc[cluster_id==ii]
+        subset = data.Iproc['%s'%i][cluster_id==ii]
         axis.hist(subset, bins=bins, alpha=0.5, label=f"Cluster {ii}")
         data.Kmean.append(np.mean(subset))
         data.Kstd.append(np.std(subset))
@@ -116,7 +117,7 @@ def cluster():
     data.Imin = data.Kmean[np.where(data.Kmean == min(data.Kmean))[0][0]]
     data.Ihalf = (data.Imax - data.Imin)/2+data.Imin
     data.Ie2 = (data.Imax - data.Imin)/np.exp(2)+data.Imin
-    #data.Imaxx = np.max(data.Iproc)
+    #data.Imaxx = np.max(data.Iproc['%s'%i])
     data.Icluster = [data.Ihalf]
     # Plot the thresholds
     for th in data.Icluster:
@@ -124,13 +125,13 @@ def cluster():
     axis.legend()
     
 # Find the centroid of the X and Y data above some photosensor current threshold
-def findsensor(thresh):
+def findsensor(thresh,i):
     data.Xtemp, data.Ytemp, data.Itemp = [],[],[]
-    for i in range(len(data.Iproc)):
-        if data.Iproc[i] >= thresh:
-            data.Xtemp.append(data.Xproc[i])
-            data.Ytemp.append(data.Yproc[i])
-            data.Itemp.append(data.Iproc[i]) 
+    for j in range(len(data.Iproc['%s'%i])):
+        if data.Iproc['%s'%i][j] >= thresh:
+            data.Xtemp.append(data.Xproc[j])
+            data.Ytemp.append(data.Yproc[j])
+            data.Itemp.append(data.Iproc['%s'%i][j]) 
     data.Isum = np.sum(data.Itemp)
     data.Xmean = np.dot(data.Xtemp,data.Itemp)/data.Isum
     data.Ymean = np.dot(data.Ytemp,data.Itemp)/data.Isum
@@ -138,15 +139,15 @@ def findsensor(thresh):
 
 # Plots go here
 # Plot 2D histograms of position and signal    
-def histplot():
+def histplot(i):
     figure, axis = plt.subplots(2,1,dpi=200,figsize=(12,12))  
     axis[0].hist2d(data.Xr,np.abs(data.Ir),bins=30,norm=LogNorm()) 
     axis[1].hist2d(data.Yr,np.abs(data.Ir),bins=30,norm=LogNorm()) 
     for th in data.Icluster:
-        for i in range(len(findsensor(th))):
-            print(findsensor(th))
-            axis[i].axvline(findsensor(th)[i])
-            axis[i].axhline(th)
+        for j in range(len(findsensor(th,i))):
+            print(findsensor(th,i))
+            axis[j].axvline(findsensor(th,i)[j])
+            axis[j].axhline(th)
     for ax in axis:
         ax.set_ylabel('PD Current\n'+r'I = 10$^y$ [A]')
     axis[0].set_xlabel('X position [mm]')
@@ -154,23 +155,45 @@ def histplot():
     #figure.savefig(os.path.join(PLOTS,'%s_histplot.svg'))
 
 # Plot a 2D reconstruction of the sensor lightmap
-def lightmap():
+def lightmap(i):
     x=np.unique(data.Xproc)
     y=np.unique(data.Yproc)
     X,Y = np.meshgrid(y,x)
-    I=data.Iproc.reshape(len(x),len(y))
+    I=data.Iproc['%s'%i].reshape(len(x),len(y))
     figure, axis = plt.subplots(1,1,dpi=200,figsize=(5,4))
-    im = axis.pcolormesh(Y,X,I) 
+    im = axis.pcolormesh(Y,X,I)#,norm=LogNorm(vmin=I.min(), vmax=I.max()))
     axis.set_xlabel('X position [mm]')
     axis.set_ylabel('Y position [mm]')
     divider = make_axes_locatable(axis)
     cax = divider.append_axes('right', size='5%', pad=0.1)
     figure.colorbar(im,cax=cax,orientation='vertical',label='Current [A]')
+    axis.axis('square')
     for th in data.Icluster:
-        axis.scatter(findsensor(th)[0],findsensor(th)[1])
-        #axis.contour(np.transpose(I),[th],colors='k')
+        axis.scatter(findsensor(th,i)[0],findsensor(th,i)[1])
+        axis.contour(Y,X,I,[th],colors='k')
     #figure.savefig(os.path.join(PLOTS,'%s_lightmap.svg'))
-        
+
+# Plot a 2D reconstruction of the sensor lightmap
+def tilemap():
+    x=np.unique(data.Xproc)
+    y=np.unique(data.Yproc)
+    X,Y = np.meshgrid(y,x)
+    I=(data.Iproc['sum'].reshape(len(x),len(y)))/max(data.Iproc['sum'])
+    figure, axis = plt.subplots(1,1,dpi=200,figsize=(5,4))
+    im = axis.pcolormesh(Y,X,I)#,norm=LogNorm(vmin=I.min(), vmax=I.max())) 
+    axis.set_xlabel('X position [mm]')
+    axis.set_ylabel('Y position [mm]')
+    divider = make_axes_locatable(axis)
+    cax = divider.append_axes('right', size='5%', pad=0.1)
+    figure.colorbar(im,cax=cax,orientation='vertical',label='Current [a.u]')
+    axis.axis('square')
+    for th in data.Icluster:
+        for i in a:
+            axis.scatter(findsensor(th,i)[0],findsensor(th,i)[1])
+            I=data.Iproc['%s'%i].reshape(len(x),len(y))
+            axis.contour(Y,X,I,[th],colors='k')
+    #figure.savefig(os.path.join(PLOTS,'%s_lightmap.svg'))
+    
 # Plot the position and signal data as a function of time    
 def plot(i):
     figure, axis = plt.subplots(3,1,dpi=200,figsize=(12,12))
@@ -218,31 +241,27 @@ def checkgap(tvals):
 def plots(i):
     plot(i)
     #stepplot()
-    histplot()
-    lightmap()
+    histplot(i)
+    lightmap(i)
     
 if __name__ == "__main__":
     SCRIPTS,HOME,DATA,ARCHIVE,TEMP,DEV,PROC,PLOTS,REPORTS = init.envr() # Setup the local environment
     bname = os.listdir(DEV)[0][:-6] # Find the basename for the data files
     data = load_data(DEV,bname) # Create the data class
-    a = [1,2,3,4,5,6,7,9,10]
-    b = [];c=[];d=[];e=[]
+    a = [6,7,8,9,10,11,12,14,15,16]
+    b = [];c=[]
+    data.Iproc['sum'] = []
     for i in a:
-        try:
-            main(i,-84) # Align the data and do analysis
-            plots(i) # What plots to draw
-            b.append(i)
-        except:
-            try:
-                main(i,-1) # Align the data and do analysis
-                plots(i) # What plots to draw
-                d.append(i)
-            except:
-                main(i,-1) # Align the data and do analysis
-                plots(i) # What plots to draw
-                e.append(i)
-        c.append([i,findsensor(data.Icluster[0])[0],findsensor(data.Icluster[0])[1]])
-    print(b,d,e)
+        main(i,-84.3) # Align the data and do analysis
+        plots(i) # What plots to draw
+        if i == a[0]:
+            data.Iproc['sum'] = data.Iproc['%s'%i]**3
+        else:
+            data.Iproc['sum'] += data.Iproc['%s'%i]**3
+        b.append(i)
+        c.append([i,findsensor(data.Icluster[0],i)[0],findsensor(data.Icluster[0],i)[1]])
+    tilemap()
+    print(b)
     print(c)
     
 # -85 works for 1,5,6,7,'8',9,10
