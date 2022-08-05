@@ -8,9 +8,16 @@ Created on Sat Jul 16 17:07:23 2022
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import itertools
+
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm
+from matplotlib.ticker import LinearLocator, FormatStrFormatter
+
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from sklearn.cluster import KMeans
+
 import init
 
 # The default data class
@@ -19,7 +26,7 @@ class load_data:
     def __init__(self, loc, fname):
         self.XY = np.genfromtxt(os.path.join(loc,fname + 'XY.csv'), delimiter = ',', comments='#', names = True, skip_header=1)
         self.IV = np.genfromtxt(os.path.join(loc,fname + 'IV.csv'), delimiter = ',', comments='#', names = True, skip_header=2)
-        self.Iproc = {}
+        self.Iproc, self.Ithresh, self.Xmean, self.Ymean = {},{},{},{}
 
 # Main loop for aligning and analysing the data
 # Do all of the analysis tasks necessary for finding the sensor
@@ -106,6 +113,7 @@ def cluster(i):
     data.Kmean, data.Kstd = [],[]
     axis.set_xlabel('Current [A]')
     axis.set_ylabel('Counts')
+    axis.set_yscale('log')
     # Average the clusters
     for ii in np.unique(cluster_id):
         subset = data.Iproc['%s'%i][cluster_id==ii]
@@ -118,13 +126,14 @@ def cluster(i):
     data.Ihalf = (data.Imax - data.Imin)/2+data.Imin
     data.Ie2 = (data.Imax - data.Imin)/np.exp(2)+data.Imin
     #data.Imaxx = np.max(data.Iproc['%s'%i])
-    data.Icluster = [data.Ihalf]
+    data.Ithresh['%s'%i] = [data.Ihalf]
     # Plot the thresholds
-    for th in data.Icluster:
+    for th in data.Ithresh['%s'%i]:
+        findsensor(th,i)
         axis.axvline(th)
     axis.legend()
     
-# Find the centroid of the X and Y data above some photosensor current threshold
+# Find the centroid of the X and Y data above some threshold
 def findsensor(thresh,i):
     data.Xtemp, data.Ytemp, data.Itemp = [],[],[]
     for j in range(len(data.Iproc['%s'%i])):
@@ -132,24 +141,24 @@ def findsensor(thresh,i):
             data.Xtemp.append(data.Xproc[j])
             data.Ytemp.append(data.Yproc[j])
             data.Itemp.append(data.Iproc['%s'%i][j]) 
-    data.Isum = np.sum(data.Itemp)
-    data.Xmean = np.dot(data.Xtemp,data.Itemp)/data.Isum
-    data.Ymean = np.dot(data.Ytemp,data.Itemp)/data.Isum
-    return data.Xmean, data.Ymean
+    data.Inorm = np.sum(data.Itemp)
+    data.Xmean['%s'%i] = np.dot(data.Xtemp,data.Itemp)/data.Inorm
+    data.Ymean['%s'%i] = np.dot(data.Ytemp,data.Itemp)/data.Inorm
+    return data.Xmean['%s'%i], data.Ymean['%s'%i]
 
 # Plots go here
 # Plot 2D histograms of position and signal    
 def histplot(i):
     figure, axis = plt.subplots(2,1,dpi=200,figsize=(12,12))  
-    axis[0].hist2d(data.Xr,np.abs(data.Ir),bins=30,norm=LogNorm()) 
-    axis[1].hist2d(data.Yr,np.abs(data.Ir),bins=30,norm=LogNorm()) 
-    for th in data.Icluster:
-        for j in range(len(findsensor(th,i))):
-            print(findsensor(th,i))
-            axis[j].axvline(findsensor(th,i)[j])
-            axis[j].axhline(th)
+    axis[0].hist2d(data.Xr,np.abs(data.Ir),bins=len(np.unique(data.Xr)),norm=LogNorm()) 
+    axis[1].hist2d(data.Yr,np.abs(data.Ir),bins=len(np.unique(data.Yr)),norm=LogNorm()) 
+    for th in data.Ithresh['%s'%i]:
+        axis[0].axhline(th)
+        axis[0].axhline(th)
+    axis[0].axvline(data.Xmean['%s'%i])
+    axis[1].axvline(data.Ymean['%s'%i])
     for ax in axis:
-        ax.set_ylabel('PD Current\n'+r'I = 10$^y$ [A]')
+        ax.set_ylabel('SiPM Current [A]')
     axis[0].set_xlabel('X position [mm]')
     axis[1].set_xlabel('Y position [mm]')
     #figure.savefig(os.path.join(PLOTS,'%s_histplot.svg'))
@@ -168,9 +177,8 @@ def lightmap(i):
     cax = divider.append_axes('right', size='5%', pad=0.1)
     figure.colorbar(im,cax=cax,orientation='vertical',label='Current [A]')
     axis.axis('square')
-    for th in data.Icluster:
-        axis.scatter(findsensor(th,i)[0],findsensor(th,i)[1])
-        axis.contour(Y,X,I,[th],colors='k')
+    axis.scatter(data.Xmean['%s'%i],data.Ymean['%s'%i])
+    axis.contour(Y,X,I,data.Ithresh['%s'%i],colors='k')
     #figure.savefig(os.path.join(PLOTS,'%s_lightmap.svg'))
 
 # Plot a 2D reconstruction of the sensor lightmap
@@ -178,20 +186,64 @@ def tilemap():
     x=np.unique(data.Xproc)
     y=np.unique(data.Yproc)
     X,Y = np.meshgrid(y,x)
-    I=(data.Iproc['sum'].reshape(len(x),len(y)))/max(data.Iproc['sum'])
+    Isum=(data.Iproc['sum'].reshape(len(x),len(y)))#/max(data.Iproc['sum'])
     figure, axis = plt.subplots(1,1,dpi=200,figsize=(5,4))
-    im = axis.pcolormesh(Y,X,I)#,norm=LogNorm(vmin=I.min(), vmax=I.max())) 
+    im = axis.pcolormesh(Y,X,Isum)#,norm=LogNorm(vmin=I.min(), vmax=I.max())) 
     axis.set_xlabel('X position [mm]')
     axis.set_ylabel('Y position [mm]')
     divider = make_axes_locatable(axis)
     cax = divider.append_axes('right', size='5%', pad=0.1)
-    figure.colorbar(im,cax=cax,orientation='vertical',label='Current [a.u]')
+    figure.colorbar(im,cax=cax,orientation='vertical',label='Current [A]')
     axis.axis('square')
-    for th in data.Icluster:
-        for i in a:
-            axis.scatter(findsensor(th,i)[0],findsensor(th,i)[1])
-            I=data.Iproc['%s'%i].reshape(len(x),len(y))
-            axis.contour(Y,X,I,[th],colors='k')
+    for i in a:
+        axis.scatter(data.Xmean['%s'%i],data.Ymean['%s'%i])
+        I=data.Iproc['%s'%i].reshape(len(x),len(y))
+        axis.contour(Y,X,I,data.Ithresh['%s'%i],colors='k')
+    #figure.savefig(os.path.join(PLOTS,'%s_lightmap.svg'))
+    
+# Fit SiPM 
+def fitloc():
+    # Calculate the slope
+    Ypairs = [[6,7,8],[9,10,11,12],[14,15,16]]
+    my = []
+    for i in range(len(Ypairs)):
+        combos = list(itertools.combinations(Ypairs[i],2))
+        for p in combos:
+            dx = np.abs(data.Xmean['%s'%p[0]]-data.Xmean['%s'%p[1]])
+            dy = np.abs(data.Ymean['%s'%p[0]]-data.Ymean['%s'%p[1]])
+            my.append(dy/dx)
+    mY = np.mean(my);mYs = np.std(my)
+    Xpairs = [[6,9],[10,14],[7,11,15],[8,12,16]]
+    mx = []
+    for i in range(len(Xpairs)):
+        combos = list(itertools.combinations(Xpairs[i],2))
+        for p in combos:
+            dx = np.abs(data.Xmean['%s'%p[0]]-data.Xmean['%s'%p[1]])
+            dy = np.abs(data.Ymean['%s'%p[0]]-data.Ymean['%s'%p[1]])
+            mx.append(dy/dx)   
+    mX = np.mean(mx);mXs = np.std(mx)
+    print(360/(2*np.pi)*np.arctan(-mY),mYs,360/(2*np.pi)*np.arctan(mX),mXs)
+    # Fit the offset
+    #for i in range(len(Ypairs))
+    
+    
+# Plot a 3D reconstruction of the sensor lightmap
+def tdplot():
+    x=np.unique(data.Xproc)
+    y=np.unique(data.Yproc)
+    X,Y = np.meshgrid(y,x)
+    Isum=(data.Iproc['sum'].reshape(len(x),len(y)))#/max(data.Iproc['sum'])
+    # Draw the figure
+    figure = plt.figure(dpi=200)
+    axis = figure.gca(projection='3d')
+    im = axis.plot_surface(X,Y,Isum,cmap=cm.coolwarm,linewidth=0,antialiased=False)
+    for i in a:
+        cset = axis.contour(X, Y, im, extend3d=True, cmap=cm.coolwarm)
+        axis.clabel(cset, fontsize=9, inline=1)
+        #axis.scatter(data.Xmean['%s'%i],data.Ymean['%s'%i])
+        #I=data.Iproc['%s'%i].reshape(len(x),len(y))
+        #axis.contour(Y,X,I,data.Ithresh['%s'%i],colors='k')
+    plt.show()
     #figure.savefig(os.path.join(PLOTS,'%s_lightmap.svg'))
     
 # Plot the position and signal data as a function of time    
@@ -241,8 +293,8 @@ def checkgap(tvals):
 def plots(i):
     plot(i)
     #stepplot()
-    histplot(i)
-    lightmap(i)
+    #histplot(i)
+    #lightmap(i)
     
 if __name__ == "__main__":
     SCRIPTS,HOME,DATA,ARCHIVE,TEMP,DEV,PROC,PLOTS,REPORTS = init.envr() # Setup the local environment
@@ -253,19 +305,15 @@ if __name__ == "__main__":
     data.Iproc['sum'] = []
     for i in a:
         main(i,-84.3) # Align the data and do analysis
-        plots(i) # What plots to draw
+        #plots(i) # What plots to draw
         if i == a[0]:
-            data.Iproc['sum'] = data.Iproc['%s'%i]**3
+            for val in data.Iproc['%s'%i]:
+                data.Iproc['sum'].append(val)
         else:
-            data.Iproc['sum'] += data.Iproc['%s'%i]**3
+            data.Iproc['sum'] += data.Iproc['%s'%i]#**3
         b.append(i)
-        c.append([i,findsensor(data.Icluster[0],i)[0],findsensor(data.Icluster[0],i)[1]])
+        c.append([i,findsensor(data.Ithresh['%s'%i][0],i)[0],findsensor(data.Ithresh['%s'%i][0],i)[1]])
     tilemap()
-    print(b)
-    print(c)
-    
-# -85 works for 1,5,6,7,'8',9,10
-# -84 works for 2,3
-# -83 works for 4
+
 
 

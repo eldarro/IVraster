@@ -8,9 +8,8 @@ Created on Sat Jul 16 17:07:23 2022
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from sklearn.cluster import KMeans
+from scipy import special
+from scipy.optimize import curve_fit
 import init
 
 # The default data class
@@ -25,8 +24,7 @@ class load_data:
 def main():
     timecorr()
     parsescan()
-    rastersnake()
-    cluster()   
+    rastersnake() 
         
 # Correct for the offset between electrometer time and unix time  
 # The parameter dt can be used as a fitting paramter
@@ -37,14 +35,14 @@ def timecorr():
         t0 = data.XY['time'][0]
         dt = -13
     else:
-        dt = -2
+        dt = -3
     t = t0 + dt
     data.IV['CH1_Time'] = data.IV['CH1_Time']+t
   
 # Reorganize data into ordered structures
 # This function makes assumptions about the structure of the input data
 def parsescan():
-    settle = 0 # number of indices to trim while electrometer is settling
+    settle = 10 # number of indices to trim while electrometer is settling
     data.coordinates = []
     for i in range(int(len(data.XY)/2)):
         data.coordinates.append([data.XY['xpos'][2*i],data.XY['ypos'][2*i],data.XY['time'][2*i],data.XY['time'][2*i+1]])
@@ -102,36 +100,7 @@ def rastersnake():
     data.Xproc = np.asarray(data.Xproc)
     data.Yproc = np.asarray(data.Yproc)
     data.Iproc = np.asarray(data.Iproc)
-    data.Ieproc = np.asarray(data.Iproc)
-    data.Iproc = np.nan_to_num(data.Iproc,nan=0) # Replace missing data with 0
-
-# Clump the data and set thresholds
-def cluster():           
-    # Determine which K-Means cluster each point belongs to
-    cluster_id = KMeans(10).fit_predict(data.Iproc.reshape(-1, 1))
-    # Determine densities by cluster assignment and plot
-    figure, axis = plt.subplots(dpi=200)
-    bins = np.linspace(data.Iproc.min(), data.Iproc.max(), 40)
-    data.Kmean, data.Kstd = [],[]
-    axis.set_xlabel('Current [A]')
-    axis.set_ylabel('Counts')
-    # Average the clusters
-    for ii in np.unique(cluster_id):
-        subset = data.Iproc[cluster_id==ii]
-        axis.hist(subset, bins=bins, alpha=0.5, label=f"Cluster {ii}")
-        data.Kmean.append(np.mean(subset))
-        data.Kstd.append(np.std(subset))
-    # Find thresholds relative to the clusters
-    data.Imax = data.Kmean[np.where(data.Kmean == max(data.Kmean))[0][0]]
-    data.Imin = data.Kmean[np.where(data.Kmean == min(data.Kmean))[0][0]]
-    data.Ihalf = (data.Imax - data.Imin)/2+data.Imin
-    data.Ie2 = (data.Imax - data.Imin)/np.exp(2)+data.Imin
-    #data.Imaxx = np.max(data.Iproc)
-    data.Icluster = [data.Imin,data.Ihalf,data.Ie2]
-    # Plot the thresholds
-    for th in data.Icluster:
-        axis.axvline(th)
-    axis.legend()
+    data.Ieproc = np.asarray(data.Ieproc)
     
 # Find the centroid of the X and Y data above some photosensor current threshold
 def findsensor(thresh):
@@ -146,43 +115,6 @@ def findsensor(thresh):
     data.Ymean = np.dot(data.Ytemp,data.Itemp)/data.Isum
     return data.Xmean, data.Ymean
 
-# Plots go here
-# Plot 2D histograms of position and signal    
-def histplot():
-    figure, axis = plt.subplots(2,1,dpi=200,figsize=(12,12))  
-    axis[0].hist2d(data.Xr,np.abs(data.Ir),bins=len(np.unique(data.Xr)),norm=LogNorm()) 
-    axis[1].hist2d(data.Yr,np.abs(data.Ir),bins=len(np.unique(data.Yr)),norm=LogNorm()) 
-    for th in data.Icluster:
-        for i in range(len(findsensor(th))):
-            axis[i].axvline(findsensor(th)[i])
-            axis[i].axhline(th)
-    for ax in axis:
-        ax.set_ylabel('PD Current\n'+r'I = 10$^y$ [A]')
-    axis[0].set_xlabel('X position [mm]')
-    axis[1].set_xlabel('Y position [mm]')
-    #figure.savefig(os.path.join(PLOTS,'%s_histplot.svg'))
-
-# Plot a 2D reconstruction of the sensor lightmap
-def lightmap():
-    x=np.unique(data.Xproc)
-    y=np.unique(data.Yproc)
-    X,Y = np.meshgrid(y,x)
-    I=data.Iproc.reshape(len(x),len(y))
-    figure, axis = plt.subplots(1,1,dpi=200,figsize=(5.2,4))
-    im = axis.pcolormesh(Y,X,I) 
-    axis.set_xlabel('X position [mm]')
-    axis.set_ylabel('Y position [mm]')
-    divider = make_axes_locatable(axis)
-    cax = divider.append_axes('right', size='5%', pad=0.1)
-    figure.colorbar(im,cax=cax,orientation='vertical',label='Current [A]')
-    axis.axis('square')
-    for th in data.Icluster[1:]:
-        print(th)
-        print(findsensor(th)[0],findsensor(th)[1])
-        axis.scatter(findsensor(th)[0],findsensor(th)[1])
-        axis.contour(Y,X,I,[th],colors='k')
-    #figure.savefig(os.path.join(PLOTS,'%s_lightmap.svg'))
-        
 # Plot the position and signal data as a function of time    
 def plot():
     figure, axis = plt.subplots(3,1,dpi=200,figsize=(12,12))
@@ -196,7 +128,104 @@ def plot():
     axis[1].set_ylabel('X-position [mm]')
     axis[2].set_ylabel('Y-position [mm]')
     axis[2].set_xlabel('Time [s]')
-    #figure.savefig(os.path.join(PLOTS,'%s_XYI.svg'))  
+    #figure.savefig(os.path.join(PLOTS,'%s_XYI.svg'))
+
+def topbeam(x,*p):
+    return p[0]/2*(1-special.erf(np.sqrt(2)*(p[1]-x)/p[2]))+p[3]
+def botbeam(x,*p):
+    return p[0]/2*(1-special.erf(np.sqrt(2)*(x-p[1])/p[2]))+p[3]
+
+# Fit the beam profile and plot the results
+def profile():
+    # Check to see what profile is in the data
+    if len(np.unique(data.Xproc)) > 1:
+        posdata = data.Xproc
+        prof = 'x'
+    if len(np.unique(data.Yproc)) > 1:
+        posdata = data.Yproc
+        prof = 'y'
+        
+    # Find the parameters for the ERF fit
+    # Locate the three regions about the two inflection points (sensor edges)
+    i0 = np.where(np.gradient(data.Iproc,posdata)==max(np.gradient(data.Iproc,posdata)))[0][0]
+    i1 = np.where(np.gradient(data.Iproc,posdata)==min(np.gradient(data.Iproc,posdata)))[0][0]
+    # Find the location of the edges
+    s0 = posdata[i0]
+    s1 = posdata[i1]
+    print(s0,s1)
+    # Locate the index corresponding to the center of the beam
+    i2 = np.where(posdata >= s0+(s1-s0)/2)[0][0]
+    # Estimate the max power and offset
+
+    I0 = np.mean([x for x in data.Iproc[i0:i1] if str(x) != 'nan']) # Max
+    I1 = np.mean([x for x in data.Iproc[:i0] if str(x) != 'nan']) # Offset
+    I2 = np.mean([x for x in data.Iproc[i1:] if str(x) != 'nan']) # Offset
+    # Estimate the indices corresponding the beam radius
+    i3 = np.where(data.Iproc >= I1)[0][0]
+    i4 = np.where(data.Iproc >= I0)[0][0]
+    i5 = np.where(data.Iproc >= I0)[0][-1]
+    i6 = np.where(data.Iproc >= I2)[0][-1]
+    # Estimate the beam radius
+    w0 = (posdata[i4]-posdata[i3])/2
+    w1 = (posdata[i6]-posdata[i5])/2
+    # Organise the best-guess parameters into an array
+    P0 = [I0,s0,w0,I1]
+    P1 = [I0,s1,w1,I2]
+    
+    # Split the data into sections corresponding to each side of the sensor and remove nan
+    toppos, topsignal, toperror, botpos, botsignal, boterror = [],[],[],[],[],[]
+    for i in range(len(data.Iproc[:i2])):
+        if str(data.Iproc[:i2][i]) != 'nan':
+            toppos.append(posdata[:i2][i])
+            topsignal.append(data.Iproc[:i2][i])
+            toperror.append(data.Ieproc[:i2][i])
+    for i in range(len(data.Iproc[i2:])):
+        if str(data.Iproc[i2:][i]) != 'nan':
+            botpos.append(posdata[i2:][i])
+            botsignal.append(data.Iproc[i2:][i])  
+            boterror.append(data.Ieproc[i2:][i])
+    toppos, topsignal, toperror, botpos, botsignal, boterror = np.array(toppos), np.array(topsignal), np.array(toperror), np.array(botpos), np.array(botsignal), np.array(boterror)
+
+    # Fit the data
+    top_popt, top_pcov = curve_fit(topbeam,toppos,topsignal,p0=P0)
+    bot_popt, bot_pcov = curve_fit(botbeam,botpos,botsignal,p0=P1)
+    
+    # Calculate the residuals
+    topres = (topbeam(toppos,*top_popt)-topsignal)/toperror
+    botres = (botbeam(botpos,*bot_popt)-botsignal)/boterror
+
+    # Calculate the chi2
+    top_X2 = np.sum(topres**2/(len(topsignal)-len(P0)))
+    bot_X2 = np.sum(botres**2/(len(botsignal)-len(P1)))
+
+    # Plot the data and fit
+    figure, axis = plt.subplots(2,1,dpi=200,figsize=(12,12))
+    axis[1].errorbar(posdata,data.Iproc,yerr=data.Ieproc)
+
+    axis[1].plot(toppos,topbeam(toppos,*top_popt),label='P0 = %.2e A\nx0 = %.1f mm\nw0 = %.2f mm\nE0 = %.2e A'%(top_popt[0],top_popt[1],top_popt[2],top_popt[3]))
+    axis[1].plot(botpos,botbeam(botpos,*bot_popt),label='P0 = %.2e A\nx0 = %.1f mm\nw0 = %.2f mm\nE0 = %.2e A'%(bot_popt[0],bot_popt[1],bot_popt[2],bot_popt[3]))
+    # Plot the residuals from the fit
+    axis[0].plot(toppos,(topbeam(toppos,*top_popt)-topsignal)/toperror)
+    axis[0].plot(botpos,(botbeam(botpos,*bot_popt)-botsignal)/boterror)
+
+    # Plot the best-guess parameters
+    #axis[1].plot(toppos,topbeam(toppos,P0))
+    #axis[1].plot(botpos,botbeam(botpos,P1))  
+    #axis[0].plot(posdata,np.gradient(data.Iproc,posdata))
+    
+    # Format the plots
+    for ax in axis:
+        if prof == 'x':
+            ax.set_xlabel('X-position [mm]')
+        if prof == 'y':
+            ax.set_xlabel('Y-position [mm]')
+        ax.set_xlim(posdata[0],posdata[-1])
+        for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] + ax.get_xticklabels() + ax.get_yticklabels()):
+            item.set_fontsize(20)
+    axis[0].set_ylabel('Normalised Residuals')
+    axis[1].set_ylabel('PD Current [pA]')
+    axis[1].legend()
+    #figure.savefig(os.path.join(PLOTS,'%s_XYI.svg'))    
 
 # Debugging plots go here
 # Plot the position and signal data, highlight the averaged data
@@ -233,9 +262,7 @@ def checkgap(tvals):
 def plots():
     plot()
     #stepplot()
-    histplot()
-    #lightmap()
-
+    profile()
     
 if __name__ == "__main__":
     SCRIPTS,HOME,DATA,ARCHIVE,TEMP,DEV,PROC,PLOTS,REPORTS = init.envr() # Setup the local environment
