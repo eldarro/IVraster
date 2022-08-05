@@ -8,8 +8,19 @@ Created on Sat Jul 16 17:07:23 2022
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import itertools
+
 from scipy import special
 from scipy.optimize import curve_fit
+
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm
+from matplotlib.ticker import LinearLocator, FormatStrFormatter
+
+from matplotlib.colors import LogNorm
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from sklearn.cluster import KMeans
+
 import init
 
 # The default data class
@@ -17,35 +28,29 @@ import init
 class load_data:
     def __init__(self, loc, fname):
         self.XY = np.genfromtxt(os.path.join(loc,fname + 'XY.csv'), delimiter = ',', comments='#', names = True, skip_header=1)
-        self.IV = np.genfromtxt(os.path.join(loc,fname + 'IV.csv'), delimiter = ',', comments='#', names = True, skip_header=0)
+        self.IV = np.genfromtxt(os.path.join(loc,fname + 'IV.csv'), delimiter = ',', comments='#', names = True, skip_header=2)
+        self.Iproc, self.Ieproc, self.Ithresh, self.Xmean, self.Ymean = {},{},{},{},{}
 
 # Main loop for aligning and analysing the data
 # Do all of the analysis tasks necessary for finding the sensor
-def main():
-    timecorr()
-    parsescan()
-    rastersnake() 
+def main(i,dt):
+    timecorr(i,dt)
+    parsescan(i)
+    rastersnake(i) 
         
 # Correct for the offset between electrometer time and unix time  
 # The parameter dt can be used as a fitting paramter
 # The correct value of dt will 'focus' the plots from lightmap and histplot
-def timecorr():
-    t0 = 1659568610.6043196 
-    if t0 == 0:
-        t0 = data.XY['time'][0]
-        dt = -13
-    else:
-        dt = -3
-    t = t0 + dt
-    data.IV['CH1_Time'] = data.IV['CH1_Time']+t
+def timecorr(i,dt):
+    #dt = -85
+    data.IV['TsCH_%i_s'%i] += dt
   
 # Reorganize data into ordered structures
 # This function makes assumptions about the structure of the input data
-def parsescan():
-    settle = 10 # number of indices to trim while electrometer is settling
+def parsescan(i):
     data.coordinates = []
-    for i in range(int(len(data.XY)/2)):
-        data.coordinates.append([data.XY['xpos'][2*i],data.XY['ypos'][2*i],data.XY['time'][2*i],data.XY['time'][2*i+1]])
+    for j in range(int(len(data.XY)/2)):
+        data.coordinates.append([data.XY['xpos'][2*j],data.XY['ypos'][2*j],data.XY['time'][2*j],data.XY['time'][2*j+1]])
     #data.coordinates.append([data.XY['xpos'][-1],data.XY['ypos'][-1],data.XY['time'][-1],data.XY['time'][-1]+param[6]])
     #print(data.coordinates)
     data.XYIr = []
@@ -55,15 +60,14 @@ def parsescan():
     f.write('X,Y,I');g.write('X,Y,I,Ierr')
     data.index = []
     for row in data.coordinates:
-        l = np.where(data.IV['CH1_Time'] >= row[2])[0][0]+settle
-        m = np.where(data.IV['CH1_Time'] <= row[3])[0][-1]-settle
-        data.index.append([l,m])
-        for i in range(l,m):
-            I = data.IV['CH1_Current'][i]
-            data.XYIr.append([row[0],row[1],I])
-            f.write('\n%s,%s,%s'%(row[0],row[1],I))
-        Iavg = np.average(data.IV['CH1_Current'][l:m])
-        Ierr = np.std(data.IV['CH1_Current'][l:m])/np.sqrt(len(data.IV['CH1_Current'][l:m]))
+        I = []
+        for k in range(len(data.IV['TsCH_%i_s'%i])):
+            if row[2] < data.IV['TsCH_%i_s'%i][k] < row[3]:
+                I.append(data.IV['IsCH_%i_A'%i][k])
+                data.XYIr.append([row[0],row[1],data.IV['IsCH_%i_A'%i][k]])
+                f.write('\n%s,%s,%s'%(row[0],row[1],I)) 
+        Iavg = np.average(I)
+        Ierr = np.std(I)
         #if Iavg != Iavg: # Check for missing data
         #    print(data.IV['CH1_Current'][l:m])
         #    print(l,m)
@@ -84,59 +88,60 @@ def parsescan():
         data.Ir.append(row[2])
 
 # Convert the shape of the data from bidirectional to unidirectional        
-def rastersnake():
+def rastersnake(i):
     X = np.unique(data.X)
     Y = np.unique(data.Y)
-    data.Xproc, data.Yproc, data.Iproc, data.Ieproc = [],[],[],[]
+    data.Xproc, data.Yproc, data.Iproc['%s'%i], data.Ieproc['%s'%i] = [],[],[],[]
     for x in X:
         for y in Y:
-            for i in range(len(data.XYI)):
-                if x == data.XYI[i][0]:
-                    if y == data.XYI[i][1]:
-                        data.Xproc.append(data.XYI[i][0])
-                        data.Yproc.append(data.XYI[i][1])
-                        data.Iproc.append(data.XYI[i][2])
-                        data.Ieproc.append(data.XYI[i][3])
+            for j in range(len(data.XYI)):
+                if x == data.XYI[j][0]:
+                    if y == data.XYI[j][1]:
+                        data.Xproc.append(data.XYI[j][0])
+                        data.Yproc.append(data.XYI[j][1])
+                        data.Iproc['%s'%i].append(data.XYI[j][2])
+                        data.Ieproc['%s'%i].append(data.XYI[j][3])
     data.Xproc = np.asarray(data.Xproc)
     data.Yproc = np.asarray(data.Yproc)
-    data.Iproc = np.asarray(data.Iproc)
-    data.Ieproc = np.asarray(data.Ieproc)
-    
-# Find the centroid of the X and Y data above some photosensor current threshold
-def findsensor(thresh):
-    data.Xtemp, data.Ytemp, data.Itemp = [],[],[]
-    for i in range(len(data.Iproc)):
-        if data.Iproc[i] >= thresh:
-            data.Xtemp.append(data.Xproc[i])
-            data.Ytemp.append(data.Yproc[i])
-            data.Itemp.append(data.Iproc[i]) 
-    data.Isum = np.sum(data.Itemp)
-    data.Xmean = np.dot(data.Xtemp,data.Itemp)/data.Isum
-    data.Ymean = np.dot(data.Ytemp,data.Itemp)/data.Isum
-    return data.Xmean, data.Ymean
+    data.Iproc['%s'%i] = np.asarray(data.Iproc['%s'%i])
+    data.Ieproc['%s'%i] = np.asarray(data.Ieproc['%s'%i])
 
+# Find the centroid of the X and Y data above some threshold
+def findsensor(thresh,i):
+    data.Xtemp, data.Ytemp, data.Itemp = [],[],[]
+    for j in range(len(data.Iproc['%s'%i])):
+        if data.Iproc['%s'%i][j] >= thresh:
+            data.Xtemp.append(data.Xproc[j])
+            data.Ytemp.append(data.Yproc[j])
+            data.Itemp.append(data.Iproc['%s'%i][j]) 
+    data.Inorm = np.sum(data.Itemp)
+    data.Xmean['%s'%i] = np.dot(data.Xtemp,data.Itemp)/data.Inorm
+    data.Ymean['%s'%i] = np.dot(data.Ytemp,data.Itemp)/data.Inorm
+    return data.Xmean['%s'%i], data.Ymean['%s'%i]
+    
 # Plot the position and signal data as a function of time    
-def plot():
+def plot(i):
     figure, axis = plt.subplots(3,1,dpi=200,figsize=(12,12))
-    axis[0].plot(data.IV['CH1_Time'],data.IV['CH1_Current']*1E12)
+    axis[0].plot(data.IV['TsCH_%i_s'%i],data.IV['IsCH_%i_A'%i]*1E6,label='Channel %i'%i)
     axis[1].plot(data.XY['time'],data.XY['xpos'])
     axis[2].plot(data.XY['time'],data.XY['ypos'])
     axis[0].set_yscale('log')
     for ax in axis:
-        ax.set_xlim(data.IV['CH1_Time'][0],data.IV['CH1_Time'][-1])
-    axis[0].set_ylabel('PD Current [pA]')
+        ax.set_xlim(data.XY['time'][0],data.XY['time'][-1])
+    axis[0].set_ylabel('SiPM Current [uA]')
     axis[1].set_ylabel('X-position [mm]')
     axis[2].set_ylabel('Y-position [mm]')
     axis[2].set_xlabel('Time [s]')
+    axis[0].legend()
     #figure.savefig(os.path.join(PLOTS,'%s_XYI.svg'))
-
+    
 def topbeam(x,*p):
     return p[0]/2*(1-special.erf(np.sqrt(2)*(p[1]-x)/p[2]))+p[3]
 def botbeam(x,*p):
     return p[0]/2*(1-special.erf(np.sqrt(2)*(x-p[1])/p[2]))+p[3]
 
 # Fit the beam profile and plot the results
-def profile():
+def profile(i):
     # Check to see what profile is in the data
     if len(np.unique(data.Xproc)) > 1:
         posdata = data.Xproc
@@ -147,8 +152,8 @@ def profile():
         
     # Find the parameters for the ERF fit
     # Locate the three regions about the two inflection points (sensor edges)
-    i0 = np.where(np.gradient(data.Iproc,posdata)==max(np.gradient(data.Iproc,posdata)))[0][0]
-    i1 = np.where(np.gradient(data.Iproc,posdata)==min(np.gradient(data.Iproc,posdata)))[0][0]
+    i0 = np.where(np.gradient(data.Iproc['%s'%i],posdata)==max(np.gradient(data.Iproc['%s'%i],posdata)))[0][0]
+    i1 = np.where(np.gradient(data.Iproc['%s'%i],posdata)==min(np.gradient(data.Iproc['%s'%i],posdata)))[0][0]
     # Find the location of the edges
     s0 = posdata[i0]
     s1 = posdata[i1]
@@ -157,14 +162,14 @@ def profile():
     i2 = np.where(posdata >= s0+(s1-s0)/2)[0][0]
     # Estimate the max power and offset
 
-    I0 = np.mean([x for x in data.Iproc[i0:i1] if str(x) != 'nan']) # Max
-    I1 = np.mean([x for x in data.Iproc[:i0] if str(x) != 'nan']) # Offset
-    I2 = np.mean([x for x in data.Iproc[i1:] if str(x) != 'nan']) # Offset
+    I0 = np.mean([x for x in data.Iproc['%s'%i][i0:i1] if str(x) != 'nan']) # Max
+    I1 = np.mean([x for x in data.Iproc['%s'%i][:i0] if str(x) != 'nan']) # Offset
+    I2 = np.mean([x for x in data.Iproc['%s'%i][i1:] if str(x) != 'nan']) # Offset
     # Estimate the indices corresponding the beam radius
-    i3 = np.where(data.Iproc >= I1)[0][0]
-    i4 = np.where(data.Iproc >= I0)[0][0]
-    i5 = np.where(data.Iproc >= I0)[0][-1]
-    i6 = np.where(data.Iproc >= I2)[0][-1]
+    i3 = np.where(data.Iproc['%s'%i] >= I1)[0][0]
+    i4 = np.where(data.Iproc['%s'%i] >= I0)[0][0]
+    i5 = np.where(data.Iproc['%s'%i] >= I0)[0][-1]
+    i6 = np.where(data.Iproc['%s'%i] >= I2)[0][-1]
     # Estimate the beam radius
     w0 = (posdata[i4]-posdata[i3])/2
     w1 = (posdata[i6]-posdata[i5])/2
@@ -174,16 +179,16 @@ def profile():
     
     # Split the data into sections corresponding to each side of the sensor and remove nan
     toppos, topsignal, toperror, botpos, botsignal, boterror = [],[],[],[],[],[]
-    for i in range(len(data.Iproc[:i2])):
-        if str(data.Iproc[:i2][i]) != 'nan':
-            toppos.append(posdata[:i2][i])
-            topsignal.append(data.Iproc[:i2][i])
-            toperror.append(data.Ieproc[:i2][i])
-    for i in range(len(data.Iproc[i2:])):
-        if str(data.Iproc[i2:][i]) != 'nan':
-            botpos.append(posdata[i2:][i])
-            botsignal.append(data.Iproc[i2:][i])  
-            boterror.append(data.Ieproc[i2:][i])
+    for j in range(len(data.Iproc['%s'%i][:i2])):
+        if str(data.Iproc['%s'%i][:i2][j]) != 'nan':
+            toppos.append(posdata[:i2][j])
+            topsignal.append(data.Iproc['%s'%i][:i2][j])
+            toperror.append(data.Ieproc['%s'%i][:i2][j])
+    for j in range(len(data.Iproc['%s'%i][i2:])):
+        if str(data.Iproc['%s'%i][i2:][j]) != 'nan':
+            botpos.append(posdata[i2:][j])
+            botsignal.append(data.Iproc['%s'%i][i2:][j])  
+            boterror.append(data.Ieproc['%s'%i][i2:][j])
     toppos, topsignal, toperror, botpos, botsignal, boterror = np.array(toppos), np.array(topsignal), np.array(toperror), np.array(botpos), np.array(botsignal), np.array(boterror)
 
     # Fit the data
@@ -200,7 +205,7 @@ def profile():
 
     # Plot the data and fit
     figure, axis = plt.subplots(2,1,dpi=200,figsize=(12,12))
-    axis[1].errorbar(posdata,data.Iproc,yerr=data.Ieproc)
+    axis[1].errorbar(posdata,data.Iproc['%s'%i],yerr=data.Ieproc['%s'%i])
 
     axis[1].plot(toppos,topbeam(toppos,*top_popt),label='P0 = %.2e A\nx0 = %.1f mm\nw0 = %.2f mm\nE0 = %.2e A'%(top_popt[0],top_popt[1],top_popt[2],top_popt[3]))
     axis[1].plot(botpos,botbeam(botpos,*bot_popt),label='P0 = %.2e A\nx0 = %.1f mm\nw0 = %.2f mm\nE0 = %.2e A'%(bot_popt[0],bot_popt[1],bot_popt[2],bot_popt[3]))
@@ -223,53 +228,56 @@ def profile():
         for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] + ax.get_xticklabels() + ax.get_yticklabels()):
             item.set_fontsize(20)
     axis[0].set_ylabel('Normalised Residuals')
-    axis[1].set_ylabel('PD Current [pA]')
+    axis[1].set_ylabel('SiPM Current [pA]')
+    axis[0].legend()
     axis[1].legend()
     #figure.savefig(os.path.join(PLOTS,'%s_XYI.svg'))    
-
+    
 # Debugging plots go here
 # Plot the position and signal data, highlight the averaged data
 def stepplot():
-    figure, axis = plt.subplots(1,1,dpi=200,figsize=(12,12))
-    axis.plot(data.IV['CH1_Time'],data.IV['CH1_Current']*1E12)
-    #axis[1].plot(data.XY['time'],data.XY['xpos'])
-    #axis[2].plot(data.XY['time'],data.XY['ypos'])
-    #axis[0].set_yscale('log')
-
-    for index in data.index:
-        axis.axvspan(data.IV['CH1_Time'][index[0]],data.IV['CH1_Time'][index[1]],color='g',alpha=0.2)
-        #axis.axvspan(index[2],index[3],color='g',alpha=0.2)
-        #axis[1].axvspan(index[2],index[3],color='g',alpha=0.2)
-        #axis[2].axvspan(index[2],index[3],color='g',alpha=0.2)
-
-    limit = [3000,5500,0,-1]
-    axis.set_xlim(data.IV['CH1_Time'][limit[0]],data.IV['CH1_Time'][limit[1]])
-    axis.axvspan(data.IV['CH1_Time'][limit[0]],data.IV['CH1_Time'][limit[1]],alpha=0.2)
-    axis.set_ylabel('PD Current [pA]')
-    #axis[1].set_ylabel('X-position [mm]')
-    #axis[2].set_ylabel('Y-position [mm]')
-    axis.set_xlabel('Time [s]')
+    figure, axis = plt.subplots(3,1,dpi=200,figsize=(12,12))
+    axis[0].plot(data.IV['TsCH_2_s'],data.IV['IsCH_2_A']*1E6)
+    axis[1].plot(data.XY['time'],data.XY['xpos'])
+    axis[2].plot(data.XY['time'],data.XY['ypos'])
+    axis[0].set_yscale('log')
+    for index in data.coordinates[0:100]:
+        axis[0].axvspan(index[2],index[3],color='g',alpha=0.2)
+        axis[1].axvspan(index[2],index[3],color='g',alpha=0.2)
+        axis[2].axvspan(index[2],index[3],color='g',alpha=0.2)
+    for ax in axis:
+        ax.set_xlim(data.XY['time'][0],data.XY['time'][100])
+        #ax.set_xlim(100,200)
+    axis[0].set_ylabel('SiPM Current [pA]')
+    axis[1].set_ylabel('X-position [mm]')
+    axis[2].set_ylabel('Y-position [mm]')
     figure.savefig(os.path.join(PLOTS,'%s_stepplot.svg'))
 
 # Plot the time each measurement is made, useful for finding range issues with instrument
 def checkgap(tvals):
     figure, axis = plt.subplots(1,1,dpi=200)
     for tval in tvals:
-        data.plot(tval,data.IV['CH1_Time'][tval],'ro')
+        data.plot(tval,data.IV['TsCH_2_s'][tval],'ro')
     data.set_xlabel('Measurement')
     data.set_ylabel('Time [s]')    
     
-def plots():
-    plot()
+def plots(i):
+    plot(i)
     #stepplot()
-    profile()
+    profile(i)
     
 if __name__ == "__main__":
     SCRIPTS,HOME,DATA,ARCHIVE,TEMP,DEV,PROC,PLOTS,REPORTS = init.envr() # Setup the local environment
-    bname = os.listdir(DEV)[6][:-6] # Find the basename for the data files
+    bname = os.listdir(DEV)[0][:-6] # Find the basename for the data files
     data = load_data(DEV,bname) # Create the data class
-    main() # Align the data and do analysis
-    plots() # What plots to draw
+    a = [8]
+    b = [];c=[]
+    data.Iproc['sum'] = []
+    for i in a:
+        main(i,-84.3) # Align the data and do analysis
+        plots(i) # What plots to draw
+
+        
 
 
 

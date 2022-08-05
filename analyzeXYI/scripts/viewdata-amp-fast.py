@@ -111,7 +111,7 @@ def cluster(i):
     figure, axis = plt.subplots(dpi=200)
     bins = np.linspace(data.Iproc['%s'%i].min(), data.Iproc['%s'%i].max(), 40)
     data.Kmean, data.Kstd = [],[]
-    axis.set_xlabel('Current [A]')
+    axis.set_xlabel('SiPM Current [A]')
     axis.set_ylabel('Counts')
     axis.set_yscale('log')
     # Average the clusters
@@ -175,7 +175,7 @@ def lightmap(i):
     axis.set_ylabel('Y position [mm]')
     divider = make_axes_locatable(axis)
     cax = divider.append_axes('right', size='5%', pad=0.1)
-    figure.colorbar(im,cax=cax,orientation='vertical',label='Current [A]')
+    figure.colorbar(im,cax=cax,orientation='vertical',label='SiPM Current [A]')
     axis.axis('square')
     axis.scatter(data.Xmean['%s'%i],data.Ymean['%s'%i])
     axis.contour(Y,X,I,data.Ithresh['%s'%i],colors='k')
@@ -193,7 +193,7 @@ def tilemap():
     axis.set_ylabel('Y position [mm]')
     divider = make_axes_locatable(axis)
     cax = divider.append_axes('right', size='5%', pad=0.1)
-    figure.colorbar(im,cax=cax,orientation='vertical',label='Current [A]')
+    figure.colorbar(im,cax=cax,orientation='vertical',label='SiPM Current [A]')
     axis.axis('square')
     for i in a:
         axis.scatter(data.Xmean['%s'%i],data.Ymean['%s'%i])
@@ -249,13 +249,13 @@ def tdplot():
 # Plot the position and signal data as a function of time    
 def plot(i):
     figure, axis = plt.subplots(3,1,dpi=200,figsize=(12,12))
-    axis[0].plot(data.IV['TsCH_%i_s'%i],data.IV['IsCH_%i_A'%i]*1E6,label='Channel %i'%i)
+    axis[0].plot(data.IV['TsCH_%i_s'%i],data.IV['IsCH_%i_A'%i],label='Channel %i'%i)
     axis[1].plot(data.XY['time'],data.XY['xpos'])
     axis[2].plot(data.XY['time'],data.XY['ypos'])
     axis[0].set_yscale('log')
     for ax in axis:
         ax.set_xlim(data.XY['time'][0],data.XY['time'][-1])
-    axis[0].set_ylabel('PD Current [uA]')
+    axis[0].set_ylabel('SiPM Current [A]')
     axis[1].set_ylabel('X-position [mm]')
     axis[2].set_ylabel('Y-position [mm]')
     axis[2].set_xlabel('Time [s]')
@@ -266,7 +266,7 @@ def plot(i):
 # Plot the position and signal data, highlight the averaged data
 def stepplot():
     figure, axis = plt.subplots(3,1,dpi=200,figsize=(12,12))
-    axis[0].plot(data.IV['TsCH_2_s'],data.IV['IsCH_2_A']*1E6)
+    axis[0].plot(data.IV['TsCH_2_s'],data.IV['IsCH_2_A'])
     axis[1].plot(data.XY['time'],data.XY['xpos'])
     axis[2].plot(data.XY['time'],data.XY['ypos'])
     axis[0].set_yscale('log')
@@ -277,7 +277,7 @@ def stepplot():
     for ax in axis:
         ax.set_xlim(data.XY['time'][0],data.XY['time'][100])
         #ax.set_xlim(100,200)
-    axis[0].set_ylabel('PD Current [pA]')
+    axis[0].set_ylabel('SiPM Current [A]')
     axis[1].set_ylabel('X-position [mm]')
     axis[2].set_ylabel('Y-position [mm]')
     figure.savefig(os.path.join(PLOTS,'%s_stepplot.svg'))
