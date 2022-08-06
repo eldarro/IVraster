@@ -32,12 +32,12 @@ def main():
 # The parameter dt can be used as a fitting paramter
 # The correct value of dt will 'focus' the plots from lightmap and histplot
 def timecorr():
-    t0 = 1659568610.6043196 
+    t0 = 0
     if t0 == 0:
         t0 = data.XY['time'][0]
         dt = -13
     else:
-        dt = -2
+        dt = 0
     t = t0 + dt
     data.IV['CH1_Time'] = data.IV['CH1_Time']+t
   
@@ -234,12 +234,12 @@ def plots():
     plot()
     #stepplot()
     histplot()
-    #lightmap()
+    lightmap()
 
     
 if __name__ == "__main__":
     SCRIPTS,HOME,DATA,ARCHIVE,TEMP,DEV,PROC,PLOTS,REPORTS = init.envr() # Setup the local environment
-    bname = os.listdir(DEV)[6][:-6] # Find the basename for the data files
+    bname = os.listdir(DEV)[0][:-6] # Find the basename for the data files
     data = load_data(DEV,bname) # Create the data class
     main() # Align the data and do analysis
     plots() # What plots to draw
