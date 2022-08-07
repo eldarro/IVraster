@@ -105,6 +105,36 @@ def rastersnake(i):
     data.Yproc = np.asarray(data.Yproc)
     data.Iproc['%s'%i] = np.asarray(data.Iproc['%s'%i])
     data.Ieproc['%s'%i] = np.asarray(data.Ieproc['%s'%i])
+    
+# Clump the data and set thresholds
+def cluster(i):           
+    # Determine which K-Means cluster each point belongs to
+    cluster_id = KMeans(10).fit_predict(data.Iproc['%s'%i].reshape(-1, 1))
+    # Determine densities by cluster assignment and plot
+    figure, axis = plt.subplots(dpi=200)
+    bins = np.linspace(data.Iproc['%s'%i].min(), data.Iproc['%s'%i].max(), 40)
+    data.Kmean, data.Kstd = [],[]
+    axis.set_xlabel('SiPM Current [A]')
+    axis.set_ylabel('Counts')
+    axis.set_yscale('log')
+    # Average the clusters
+    for ii in np.unique(cluster_id):
+        subset = data.Iproc['%s'%i][cluster_id==ii]
+        axis.hist(subset, bins=bins, alpha=0.5, label=f"Cluster {ii}")
+        data.Kmean.append(np.mean(subset))
+        data.Kstd.append(np.std(subset))
+    # Find thresholds relative to the clusters
+    data.Imax = data.Kmean[np.where(data.Kmean == max(data.Kmean))[0][0]]
+    data.Imin = data.Kmean[np.where(data.Kmean == min(data.Kmean))[0][0]]
+    data.Ihalf = (data.Imax - data.Imin)/2+data.Imin
+    data.Ie2 = (data.Imax - data.Imin)/np.exp(2)+data.Imin
+    #data.Imaxx = np.max(data.Iproc['%s'%i])
+    data.Ithresh['%s'%i] = [data.Ihalf]
+    # Plot the thresholds
+    for th in data.Ithresh['%s'%i]:
+        findsensor(th,i)
+        axis.axvline(th)
+    axis.legend()
 
 # Find the centroid of the X and Y data above some threshold
 def findsensor(thresh,i):
@@ -122,7 +152,8 @@ def findsensor(thresh,i):
 # Plot the position and signal data as a function of time    
 def plot(i):
     figure, axis = plt.subplots(3,1,dpi=200,figsize=(12,12))
-    axis[0].plot(data.IV['TsCH_%i_s'%i],data.IV['IsCH_%i_A'%i]*1E6,label='Channel %i'%i)
+    axis[0].plot(data.IV['TsCH_%i_s'%i],data.IV['IsCH_%i_A'%i],label='Channel %i'%i)
+    axis[0].plot(data.IV['TsCH_%i_s'%i],data.IV['IsCH_%i_A'%i],label='Channel %i'%i)
     axis[1].plot(data.XY['time'],data.XY['xpos'])
     axis[2].plot(data.XY['time'],data.XY['ypos'])
     axis[0].set_yscale('log')
@@ -152,8 +183,12 @@ def profile(i):
         
     # Find the parameters for the ERF fit
     # Locate the three regions about the two inflection points (sensor edges)
-    i0 = np.where(np.gradient(data.Iproc['%s'%i],posdata)==max(np.gradient(data.Iproc['%s'%i],posdata)))[0][0]
-    i1 = np.where(np.gradient(data.Iproc['%s'%i],posdata)==min(np.gradient(data.Iproc['%s'%i],posdata)))[0][0]
+    #i0 = np.where(np.gradient(data.Iproc['%s'%i],posdata)==max(np.gradient(data.Iproc['%s'%i],posdata)))[0][0]
+    #i1 = np.where(np.gradient(data.Iproc['%s'%i],posdata)==min(np.gradient(data.Iproc['%s'%i],posdata)))[0][0]
+    i0 = np.where(data.Iproc['%s'%i]>=data.Ithresh['%s'%i])[0][0]
+    i1 = np.where(data.Iproc['%s'%i]>=data.Ithresh['%s'%i])[0][-1]
+    # Locate the FWHM from the scan
+    plt.plot()
     # Find the location of the edges
     s0 = posdata[i0]
     s1 = posdata[i1]
@@ -161,10 +196,11 @@ def profile(i):
     # Locate the index corresponding to the center of the beam
     i2 = np.where(posdata >= s0+(s1-s0)/2)[0][0]
     # Estimate the max power and offset
-
+    print(data.Iproc['%s'%i][i0:i1])
     I0 = np.mean([x for x in data.Iproc['%s'%i][i0:i1] if str(x) != 'nan']) # Max
     I1 = np.mean([x for x in data.Iproc['%s'%i][:i0] if str(x) != 'nan']) # Offset
     I2 = np.mean([x for x in data.Iproc['%s'%i][i1:] if str(x) != 'nan']) # Offset
+    print(I0,I1,I2)
     # Estimate the indices corresponding the beam radius
     i3 = np.where(data.Iproc['%s'%i] >= I1)[0][0]
     i4 = np.where(data.Iproc['%s'%i] >= I0)[0][0]
@@ -263,6 +299,7 @@ def checkgap(tvals):
     
 def plots(i):
     plot(i)
+    cluster(i)
     #stepplot()
     profile(i)
     
@@ -270,7 +307,7 @@ if __name__ == "__main__":
     SCRIPTS,HOME,DATA,ARCHIVE,TEMP,DEV,PROC,PLOTS,REPORTS = init.envr() # Setup the local environment
     bname = os.listdir(DEV)[0][:-6] # Find the basename for the data files
     data = load_data(DEV,bname) # Create the data class
-    a = [8]
+    a = [16]
     b = [];c=[]
     data.Iproc['sum'] = []
     for i in a:

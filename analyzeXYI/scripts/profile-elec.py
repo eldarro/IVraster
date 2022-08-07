@@ -30,12 +30,12 @@ def main():
 # The parameter dt can be used as a fitting paramter
 # The correct value of dt will 'focus' the plots from lightmap and histplot
 def timecorr():
-    t0 = 1659568610.6043196 
+    t0 = 1659827153.1574283 
     if t0 == 0:
         t0 = data.XY['time'][0]
-        dt = -13
+        dt = -10
     else:
-        dt = -3
+        dt = 0
     t = t0 + dt
     data.IV['CH1_Time'] = data.IV['CH1_Time']+t
   
@@ -58,12 +58,15 @@ def parsescan():
         l = np.where(data.IV['CH1_Time'] >= row[2])[0][0]+settle
         m = np.where(data.IV['CH1_Time'] <= row[3])[0][-1]-settle
         data.index.append([l,m])
+        Itemp = []
         for i in range(l,m):
             I = data.IV['CH1_Current'][i]
-            data.XYIr.append([row[0],row[1],I])
-            f.write('\n%s,%s,%s'%(row[0],row[1],I))
-        Iavg = np.average(data.IV['CH1_Current'][l:m])
-        Ierr = np.std(data.IV['CH1_Current'][l:m])/np.sqrt(len(data.IV['CH1_Current'][l:m]))
+            if I < 1E1:
+                data.XYIr.append([row[0],row[1],I])
+                f.write('\n%s,%s,%s'%(row[0],row[1],I))
+                Itemp.append(I)
+        Iavg = np.average(Itemp)
+        Ierr = np.std(Itemp)/np.sqrt(len(Itemp))
         #if Iavg != Iavg: # Check for missing data
         #    print(data.IV['CH1_Current'][l:m])
         #    print(l,m)
@@ -200,7 +203,7 @@ def profile():
 
     # Plot the data and fit
     figure, axis = plt.subplots(2,1,dpi=200,figsize=(12,12))
-    axis[1].errorbar(posdata,data.Iproc,yerr=data.Ieproc)
+    axis[1].errorbar(posdata,data.Iproc,yerr=data.Ieproc,fmt='.')
 
     axis[1].plot(toppos,topbeam(toppos,*top_popt),label='P0 = %.2e A\nx0 = %.1f mm\nw0 = %.2f mm\nE0 = %.2e A'%(top_popt[0],top_popt[1],top_popt[2],top_popt[3]))
     axis[1].plot(botpos,botbeam(botpos,*bot_popt),label='P0 = %.2e A\nx0 = %.1f mm\nw0 = %.2f mm\nE0 = %.2e A'%(bot_popt[0],bot_popt[1],bot_popt[2],bot_popt[3]))
@@ -242,7 +245,7 @@ def stepplot():
         #axis[1].axvspan(index[2],index[3],color='g',alpha=0.2)
         #axis[2].axvspan(index[2],index[3],color='g',alpha=0.2)
 
-    limit = [3000,5500,0,-1]
+    limit = [2000,5000,0,-1]
     axis.set_xlim(data.IV['CH1_Time'][limit[0]],data.IV['CH1_Time'][limit[1]])
     axis.axvspan(data.IV['CH1_Time'][limit[0]],data.IV['CH1_Time'][limit[1]],alpha=0.2)
     axis.set_ylabel('PD Current [pA]')
@@ -261,12 +264,12 @@ def checkgap(tvals):
     
 def plots():
     plot()
-    #stepplot()
+    stepplot()
     profile()
     
 if __name__ == "__main__":
     SCRIPTS,HOME,DATA,ARCHIVE,TEMP,DEV,PROC,PLOTS,REPORTS = init.envr() # Setup the local environment
-    bname = os.listdir(DEV)[6][:-6] # Find the basename for the data files
+    bname = os.listdir(DEV)[8][:-6] # Find the basename for the data files
     data = load_data(DEV,bname) # Create the data class
     main() # Align the data and do analysis
     plots() # What plots to draw

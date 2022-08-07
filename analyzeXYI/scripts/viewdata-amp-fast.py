@@ -293,14 +293,14 @@ def checkgap(tvals):
 def plots(i):
     plot(i)
     #stepplot()
-    #histplot(i)
-    #lightmap(i)
+    histplot(i)
+    lightmap(i)
     
 if __name__ == "__main__":
     SCRIPTS,HOME,DATA,ARCHIVE,TEMP,DEV,PROC,PLOTS,REPORTS = init.envr() # Setup the local environment
     bname = os.listdir(DEV)[0][:-6] # Find the basename for the data files
     data = load_data(DEV,bname) # Create the data class
-    a = [6,7,8,9,10,11,12,14,15,16]
+    a = [5,7,8,9,10,11,12,14,15,16]
     b = [];c=[]
     data.Iproc['sum'] = []
     for i in a:

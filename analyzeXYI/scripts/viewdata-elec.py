@@ -32,12 +32,12 @@ def main():
 # The parameter dt can be used as a fitting paramter
 # The correct value of dt will 'focus' the plots from lightmap and histplot
 def timecorr():
-    t0 = 0
+    t0 = 1659771983.4903615 
     if t0 == 0:
         t0 = data.XY['time'][0]
         dt = -13
     else:
-        dt = 0
+        dt = -4
     t = t0 + dt
     data.IV['CH1_Time'] = data.IV['CH1_Time']+t
   
