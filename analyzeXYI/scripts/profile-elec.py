@@ -132,6 +132,7 @@ def plot():
     axis[2].set_ylabel('Y-position [mm]')
     axis[2].set_xlabel('Time [s]')
     #figure.savefig(os.path.join(PLOTS,'%s_XYI.svg'))
+    plt.show()
 
 def topbeam(x,*p):
     return p[0]/2*(1-special.erf(np.sqrt(2)*(p[1]-x)/p[2]))+p[3]
@@ -228,6 +229,7 @@ def profile():
     axis[0].set_ylabel('Normalised Residuals')
     axis[1].set_ylabel('PD Current [pA]')
     axis[1].legend()
+    plt.show()
     #figure.savefig(os.path.join(PLOTS,'%s_XYI.svg'))    
 
 # Debugging plots go here
@@ -253,6 +255,7 @@ def stepplot():
     #axis[2].set_ylabel('Y-position [mm]')
     axis.set_xlabel('Time [s]')
     figure.savefig(os.path.join(PLOTS,'%s_stepplot.svg'))
+    plt.show()
 
 # Plot the time each measurement is made, useful for finding range issues with instrument
 def checkgap(tvals):
@@ -269,7 +272,7 @@ def plots():
     
 if __name__ == "__main__":
     SCRIPTS,HOME,DATA,ARCHIVE,TEMP,DEV,PROC,PLOTS,REPORTS = init.envr() # Setup the local environment
-    bname = os.listdir(DEV)[8][:-6] # Find the basename for the data files
+    bname = os.listdir(DEV)[2][:-6] # Find the basename for the data files
     data = load_data(DEV,bname) # Create the data class
     main() # Align the data and do analysis
     plots() # What plots to draw

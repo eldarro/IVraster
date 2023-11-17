@@ -161,6 +161,7 @@ def histplot():
     axis[0].set_xlabel('X position [mm]')
     axis[1].set_xlabel('Y position [mm]')
     #figure.savefig(os.path.join(PLOTS,'%s_histplot.svg'))
+    plt.show()
 
 # Plot a 2D reconstruction of the sensor lightmap
 def lightmap():
@@ -182,6 +183,7 @@ def lightmap():
         axis.scatter(findsensor(th)[0],findsensor(th)[1])
         axis.contour(Y,X,I,[th],colors='k')
     #figure.savefig(os.path.join(PLOTS,'%s_lightmap.svg'))
+    plt.show()
         
 # Plot the position and signal data as a function of time    
 def plot():
@@ -196,7 +198,8 @@ def plot():
     axis[1].set_ylabel('X-position [mm]')
     axis[2].set_ylabel('Y-position [mm]')
     axis[2].set_xlabel('Time [s]')
-    #figure.savefig(os.path.join(PLOTS,'%s_XYI.svg'))  
+    #figure.savefig(os.path.join(PLOTS,'%s_XYI.svg')) 
+    plt.show()
 
 # Debugging plots go here
 # Plot the position and signal data, highlight the averaged data
@@ -221,6 +224,7 @@ def stepplot():
     #axis[2].set_ylabel('Y-position [mm]')
     axis.set_xlabel('Time [s]')
     figure.savefig(os.path.join(PLOTS,'%s_stepplot.svg'))
+    plt.show()
 
 # Plot the time each measurement is made, useful for finding range issues with instrument
 def checkgap(tvals):

@@ -10,7 +10,7 @@ import os
 # Function to setup the local environment, used by parse, icq
 def envr():
     # THE DEFUALT ENVIRONMENT
-    SCRIPTS = os.getcwd() # It is anticipated that this script will run from the script directory
+    SCRIPTS = os.path.dirname(os.path.abspath(__file__)) # It is anticipated that this script will run from the script directory
     HOME = os.path.dirname(SCRIPTS)
     DATA = os.path.join(HOME,'data')
     
@@ -24,6 +24,7 @@ def envr():
     
     # ADD THE DIRECTORY PATHS TO A LIST
     directories = [SCRIPTS,HOME,DATA,ARCHIVE,TEMP,DEV,PROC,PLOTS,REPORTS]
+    print(SCRIPTS,HOME)
     
     # CHECK IF THE PATH TO THE DIRECTORIES EXISTS
     # IF THE PATH DOES NOT EXIST, MAKE IT
